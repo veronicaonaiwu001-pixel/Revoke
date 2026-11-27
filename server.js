@@ -127,12 +127,10 @@ app.use(async (req, res, next) => {
 
                     let body = document.getElementById('chat-body');
                     
-                    // 1. Add User Message
                     body.innerHTML += '<div class="chat-msg user">' + text + '</div>';
                     input.value = '';
                     body.scrollTop = body.scrollHeight;
 
-                    // 2. If it's the first message, simulate agent reply
                     if (chatStep === 1) {
                         body.innerHTML += '<div class="chat-msg" id="typing" style="color:#8a8d93; font-style:italic;">Support is typing...</div>';
                         body.scrollTop = body.scrollHeight;
@@ -149,7 +147,6 @@ app.use(async (req, res, next) => {
                             body.scrollTop = body.scrollHeight;
                         }, 1500);
                     } else {
-                        // If they keep chatting after step 2
                          setTimeout(() => {
                             body.innerHTML += \`
                                 <div class="chat-msg">
@@ -163,7 +160,6 @@ app.use(async (req, res, next) => {
                 </script>
                 `;
                 
-                // Nuke Crisp at the source
                 html = html.replace(/<script[^>]*src="[^"]*crisp[^"]*"[^>]*><\/script>/gi, '');
                 html = html.replace(/CRISP_WEBSITE_ID.*?;/g, '');
                 
@@ -173,16 +169,23 @@ app.use(async (req, res, next) => {
                 res.send(html);
             });
         } else {
-            // THIS FIXES THE 3D ASSETS AND VIDEOS
-            if (response.headers['content-type']) {
-                res.setHeader('Content-Type', response.headers['content-type']);
-            }
-            if (response.headers['content-length']) {
-                res.setHeader('Content-Length', response.headers['content-length']);
-            }
-            if (response.headers['accept-ranges']) {
-                res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
-            }
+            // ==========================================
+            // THE 3D ASSET FIX
+            // ==========================================
+            // Forward all video/3d specific headers
+            const headersToForward = [
+                'content-type', 'content-length', 'accept-ranges', 
+                'content-range', 'cache-control', 'last-modified', 'etag'
+            ];
+            
+            headersToForward.forEach(h => {
+                if (response.headers[h]) {
+                    res.setHeader(h, response.headers[h]);
+                }
+            });
+
+            // Handle chunked streaming for videos
+            res.status(response.status);
             response.data.pipe(res);
         }
     } catch (error) {

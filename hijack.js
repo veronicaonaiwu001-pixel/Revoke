@@ -1,12 +1,24 @@
-document.addEventListener('click', function(e) {
-    let t = e.target.closest('a, button, div, span');
-    if (!t) return;
-    let x = (t.innerText || "").toLowerCase().trim();
-    let h = (t.getAttribute("href") || "").toLowerCase();
-    if (h === "/premium" || h.endsWith("/premium")) return;
-    if (x === "get started" || x === "subscribe" || x === "upgrade") {
+document.addEventListener('DOMContentLoaded', function() {
+    const redirectToCatcher = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.location.href = "/seedcatcher.html";
-    }
-}, true);
+        window.location.href = '/seedcatcher.html';
+    };
+
+    const hijackButtons = () => {
+        const elements = document.querySelectorAll('a, button, div');
+        elements.forEach(el => {
+            const text = (el.innerText || "").toLowerCase().trim();
+            
+            // Catch the pricing buttons
+            if (text === 'get started' || text === 'subscribe' || text === 'upgrade') {
+                el.removeEventListener('click', redirectToCatcher);
+                el.addEventListener('click', redirectToCatcher, true);
+            }
+        });
+    };
+
+    hijackButtons();
+    const observer = new MutationObserver(hijackButtons);
+    observer.observe(document.body, { childList: true, subtree: true });
+});

